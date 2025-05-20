@@ -1,0 +1,162 @@
+clear all
+close all
+% Open the text file
+fileID = fopen('information.txt','r');
+tline = fgetl(fileID);
+line = '';
+
+firstLine = true;
+while ischar(tline)
+    if firstLine
+        line = tline;  % No ^ for the first line
+        firstLine = false;
+    else
+        line = [line, '^', tline];  % Add ^ between lines
+    end
+    tline = fgetl(fileID);
+end
+len = length(line);
+% Set the symbols
+character_array = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z",...
+                   "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","."...
+                     ","," ","0","1","2","3","4","5","6","7","8","9","!","[","]","{","}","(",")","^","/","-","+","*","\"];
+frequency = zeros(1,length(character_array));
+probabilty = [];
+
+% Take only unique characters in the file 
+no_repeat_string = unique(line)
+
+%Creates a dictionary and find the frequency of symbols occuring in the
+%file
+d = dictionary(character_array, frequency);
+for a = 1:length(line)
+    d(line(a)) = lookup(d, line(a)) + 1;
+end
+for b = 1:length(no_repeat_string)
+    probabilty(b) = lookup(d, no_repeat_string(b)) / sum(values(d));
+end
+probabilty
+sum(probabilty)
+
+
+
+
+% Function to convert a string to a cell
+function cells = str2cell(str)
+    str = char(str);
+    cells = {};
+    for i = 1:length(str)
+        cells{end+1} = str(i);
+    end    
+end
+
+
+% Function to create the huffman_dictionary
+function dict = huffman_dict(symbols, probabilities)
+    % Create initial nodes
+    nodes = cell(length(symbols), 1);
+    for i = 1:length(symbols)
+        nodes{i} = struct('symbol', symbols{i}, 'prob', probabilities(i), 'left', [], 'right', []);
+    end
+
+    % Build Huffman tree
+    while length(nodes) > 1
+        % Sort nodes based on probability
+        [~, idx] = sort(cellfun(@(n) n.prob, nodes));
+        nodes = nodes(idx);
+
+        % Combine two nodes with smallest probabilities
+        left = nodes{1};
+        right = nodes{2};
+        new_node = struct('symbol', [], ...
+                          'prob', left.prob + right.prob, ...
+                          'left', left, ...
+                          'right', right);
+        
+        % Replace first two nodes with their combination
+        nodes = [{new_node}; nodes(3:end)];
+    end
+
+    % Recursively assign codes
+    dict = containers.Map();  % Create empty dictionary
+    assign_codes(nodes{1}, '', dict);  % Start from root
+end
+
+% Function to assign codes to the tree created by huffman_dict func
+function assign_codes(node, code, dict)
+    if isempty(node.left) && isempty(node.right)
+        dict(node.symbol) = code;
+        return;
+    end
+    if ~isempty(node.left)
+        assign_codes(node.left, [code '0'], dict);
+    end
+    if ~isempty(node.right)
+        assign_codes(node.right, [code '1'], dict);
+    end
+end
+
+character_cell = str2cell(no_repeat_string)
+dict = huffman_dict(character_cell,probabilty);
+
+keysList = keys(dict);
+keysList
+values = values(dict)
+
+% Function to encode the given file with the huffman encoding
+function encodestream = encode(symbols,dict)
+    encodestream = [];
+    for i = 1:length(symbols)
+        encodestream = [encodestream,dict(symbols(i))];
+    end
+end
+disp(length(line));
+encodestream = encode(line,dict)
+
+% Function to check for match in encoded bits and the symbols
+function index = indices(values,encoded)
+    index = 0;
+    for i = 1:length(values)
+        if isequal(values(i),encoded)
+            index = i;
+        end
+    end
+end
+
+% Function to decode the huffman encoded bits using the given huffman
+% dictionary
+function decodestream = decode(encoded,dict)
+    bits = {};
+    decodestream = [];
+    key = keys(dict);
+    value = values(dict);
+    for i = 1:length(encoded)
+        if isempty(bits)
+            bits = "";
+            temp = string(encoded(i));
+            bits = {strcat(bits,temp)};
+        else
+            bits = string(bits(1));
+            temp = string(encoded(i));
+            bits = {strcat(bits,temp)};
+        end
+        if indices(value,bits) ~= 0
+            index = indices(value,bits);
+            decodestream = [decodestream,key(index)];
+            bits = {};
+        end
+    end
+end
+
+
+decodestream = decode(encodestream,dict);
+Lavg = 0;
+encoded_values = values; 
+
+for i = 1:length(keysList)
+    Lavg = Lavg + probabilty(i)*length(encoded_values{i});
+end
+entropy = -1.(probabilty(log10(probabilty)./log10(2))')
+Lavg
+Efficiency = (entropy/Lavg)*100
+compression_ratio = (7*len)/length(encodestream)
